@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, ScrollView, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 import { typography } from '../constants/typography';
 import { spacing, buttonHeight } from '../constants/spacing';
+
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 20 : StatusBar.currentHeight || 0;
 
 interface Question {
   id: string;
@@ -53,11 +55,15 @@ const questions: Question[] = [
 
 interface QuestionsScreenProps {
   navigation: any;
+  route?: any;
 }
 
-export default function QuestionsScreen({ navigation }: QuestionsScreenProps) {
+export default function QuestionsScreen({ navigation, route }: QuestionsScreenProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<{ [key: string]: string }>({});
+  
+  // Check if this is an edit mode (coming from Profile screen)
+  const isEditMode = route?.params?.isEditMode || false;
 
   const currentQuestion = questions[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
@@ -75,7 +81,17 @@ export default function QuestionsScreen({ navigation }: QuestionsScreenProps) {
     }
 
     if (isLastQuestion) {
-      navigation.navigate('MainApp');
+      if (isEditMode) {
+        // If editing, navigate back to Profile screen
+        Alert.alert(
+          'Questions Updated',
+          'Your personality questions have been updated successfully',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } else {
+        // Use replace to prevent going back to questions after initial completion
+        navigation.replace('MainApp');
+      }
     } else {
       setCurrentQuestionIndex(prev => prev + 1);
     }
@@ -88,10 +104,10 @@ export default function QuestionsScreen({ navigation }: QuestionsScreenProps) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
-      <View style={styles.content}>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
+      <View style={[styles.safeArea, { paddingTop: STATUS_BAR_HEIGHT }]}>
+        <View style={styles.content}>
         <View style={styles.header}>
           <TouchableOpacity 
             style={styles.backButton}
@@ -154,7 +170,7 @@ export default function QuestionsScreen({ navigation }: QuestionsScreenProps) {
             disabled={!answers[currentQuestion.id]}
           >
             <Text style={styles.nextButtonText}>
-              {isLastQuestion ? 'Complete Setup' : 'Next'}
+              {isLastQuestion ? (isEditMode ? 'Update Questions' : 'Complete Setup') : 'Next'}
             </Text>
             {!isLastQuestion && (
               <Ionicons name="arrow-forward" size={20} color={colors.text.white} style={styles.nextIcon} />
@@ -164,14 +180,17 @@ export default function QuestionsScreen({ navigation }: QuestionsScreenProps) {
           {!isLastQuestion && (
             <TouchableOpacity 
               style={styles.skipButton}
-              onPress={() => navigation.navigate('MainApp')}
+              onPress={() => isEditMode ? navigation.goBack() : navigation.replace('MainApp')}
             >
-              <Text style={styles.skipButtonText}>Skip Questions</Text>
+              <Text style={styles.skipButtonText}>
+                {isEditMode ? 'Cancel' : 'Skip Questions'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
+        </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -179,6 +198,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   content: {
     flex: 1,

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TouchableOpacity, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TouchableOpacity, Alert, Dimensions, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 import { typography } from '../constants/typography';
 import { spacing, buttonHeight } from '../constants/spacing';
+
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 20 : StatusBar.currentHeight || 0;
 
 const { width } = Dimensions.get('window');
 const photoSize = (width - spacing.xl * 2 - spacing.base * 2) / 3;
@@ -113,8 +115,9 @@ export default function ManagePhotosScreen({ navigation }: ManagePhotosScreenPro
   const remainingPhotos = 6 - filledPhotos;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
+      <View style={[styles.safeArea, { paddingTop: STATUS_BAR_HEIGHT }]}>
       
       <View style={styles.header}>
         <TouchableOpacity 
@@ -218,7 +221,8 @@ export default function ManagePhotosScreen({ navigation }: ManagePhotosScreenPro
 
         <View style={styles.bottomSpace} />
       </ScrollView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -226,6 +230,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',

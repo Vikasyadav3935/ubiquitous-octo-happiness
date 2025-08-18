@@ -5,6 +5,8 @@ import { colors } from '../constants/colors';
 import { typography } from '../constants/typography';
 import { spacing, inputHeight } from '../constants/spacing';
 
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 20 : StatusBar.currentHeight || 0;
+
 interface Message {
   id: string;
   text: string;
@@ -17,11 +19,21 @@ interface Message {
 
 interface ChatDetailScreenProps {
   navigation: any;
-  route: any;
+  route: {
+    params: {
+      conversationId: string;
+      otherUser: {
+        firstName: string;
+        lastName?: string;
+        isOnline?: boolean;
+        [key: string]: any;
+      };
+    };
+  };
 }
 
 export default function ChatDetailScreen({ navigation, route }: ChatDetailScreenProps) {
-  const { chat } = route.params;
+  const { conversationId, otherUser } = route.params;
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -124,9 +136,9 @@ export default function ChatDetailScreen({ navigation, route }: ChatDetailScreen
       'More Options',
       'Choose an action',
       [
-        { text: 'View Profile', onPress: () => navigation.navigate('UserProfile', { user: chat }) },
-        { text: 'Chat Settings', onPress: () => navigation.navigate('ChatSettings', { chat }) },
-        { text: 'Block User', onPress: () => navigation.navigate('BlockReportUser', { user: chat, action: 'block' }), style: 'destructive' },
+        { text: 'View Profile', onPress: () => navigation.navigate('UserProfile', { user: otherUser }) },
+        { text: 'Chat Settings', onPress: () => navigation.navigate('ChatSettings', { conversationId, otherUser }) },
+        { text: 'Block User', onPress: () => navigation.navigate('BlockReportUser', { user: otherUser, action: 'block' }), style: 'destructive' },
         { text: 'Cancel', style: 'cancel' }
       ]
     );
@@ -196,8 +208,9 @@ export default function ChatDetailScreen({ navigation, route }: ChatDetailScreen
   }, [message]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
+      <View style={[styles.safeArea, { paddingTop: STATUS_BAR_HEIGHT }]}>
       
       <View style={styles.header}>
         <TouchableOpacity 
@@ -209,16 +222,16 @@ export default function ChatDetailScreen({ navigation, route }: ChatDetailScreen
 
         <TouchableOpacity 
           style={styles.profileSection}
-          onPress={() => navigation.navigate('UserProfile', { user: chat })}
+          onPress={() => navigation.navigate('UserProfile', { user: otherUser })}
         >
           <View style={styles.profileInfo}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{chat.name.charAt(0)}</Text>
+              <Text style={styles.avatarText}>{otherUser.firstName.charAt(0)}</Text>
             </View>
             <View style={styles.nameContainer}>
-              <Text style={styles.userName}>{chat.name}</Text>
+              <Text style={styles.userName}>{otherUser.firstName} {otherUser.lastName || ''}</Text>
               <Text style={styles.userStatus}>
-                {chat.isOnline ? 'Online now' : 'Last seen recently'}
+                {otherUser.isOnline ? 'Online now' : 'Last seen recently'}
               </Text>
             </View>
           </View>
@@ -227,7 +240,7 @@ export default function ChatDetailScreen({ navigation, route }: ChatDetailScreen
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={styles.headerActionButton}
-            onPress={() => navigation.navigate('VideoCall', { user: chat })}
+            onPress={() => navigation.navigate('VideoCall', { user: otherUser })}
           >
             <Ionicons name="videocam" size={22} color={colors.primary} />
           </TouchableOpacity>
@@ -312,7 +325,8 @@ export default function ChatDetailScreen({ navigation, route }: ChatDetailScreen
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -320,6 +334,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',

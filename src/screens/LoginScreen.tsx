@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, StatusBar, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, SafeAreaView, StatusBar, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 import { typography } from '../constants/typography';
 import { spacing, buttonHeight, inputHeight } from '../constants/spacing';
+import { authService } from '../services';
+
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 20 : StatusBar.currentHeight || 0;
 
 interface LoginScreenProps {
   navigation: any;
@@ -12,13 +15,41 @@ interface LoginScreenProps {
 export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [countryCode] = useState('+91');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSendOTP = () => {
+  const handleSendOTP = async () => {
     if (!phoneNumber || phoneNumber.length !== 10) {
       Alert.alert('Invalid Phone Number', 'Please enter a valid 10-digit phone number');
       return;
     }
-    navigation.navigate('OTPVerification', { phoneNumber: countryCode + phoneNumber });
+
+    const fullPhoneNumber = countryCode + phoneNumber;
+    setIsLoading(true);
+
+    try {
+      console.log('Sending OTP to:', fullPhoneNumber);
+      const response = await authService.sendOTP(fullPhoneNumber);
+      
+      console.log('OTP Response:', response);
+      
+      if (response.success) {
+        // Navigate immediately without showing alert
+        navigation.navigate('OTPVerification', { phoneNumber: fullPhoneNumber });
+      } else {
+        Alert.alert(
+          'Failed to Send OTP', 
+          response.error || response.message || 'Something went wrong. Please try again.'
+        );
+      }
+    } catch (error) {
+      console.error('OTP Send Error:', error);
+      Alert.alert(
+        'Network Error', 
+        'Please check your internet connection and try again.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatPhoneNumber = (text: string) => {
@@ -27,8 +58,9 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
+      <View style={[styles.safeArea, { paddingTop: STATUS_BAR_HEIGHT }]}>
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardContainer}
@@ -72,12 +104,24 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             <TouchableOpacity 
               style={[
                 styles.sendOTPButton,
-                { opacity: phoneNumber.length === 10 ? 1 : 0.6 }
+                { 
+                  opacity: (phoneNumber.length === 10 && !isLoading) ? 1 : 0.6,
+                  backgroundColor: isLoading ? colors.text.light : colors.primary
+                }
               ]}
               onPress={handleSendOTP}
-              disabled={phoneNumber.length !== 10}
+              disabled={phoneNumber.length !== 10 || isLoading}
             >
-              <Text style={styles.sendOTPButtonText}>Send OTP</Text>
+              {isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color={colors.text.white} />
+                  <Text style={[styles.sendOTPButtonText, { marginLeft: spacing.sm }]}>
+                    Sending...
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.sendOTPButtonText}>Send OTP</Text>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -91,7 +135,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           </View>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -99,6 +144,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   keyboardContainer: {
     flex: 1,
@@ -213,5 +261,10 @@ const styles = StyleSheet.create({
   linkText: {
     color: colors.primary,
     fontFamily: typography.fontFamily.medium,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

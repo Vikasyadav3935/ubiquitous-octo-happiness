@@ -1,18 +1,75 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TouchableOpacity, Switch, Platform, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 import { typography } from '../constants/typography';
 import { spacing, buttonHeight } from '../constants/spacing';
+import { authService } from '../services';
+
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 20 : StatusBar.currentHeight || 0;
 
 interface ProfileScreenProps {
   navigation: any;
 }
 
 export default function ProfileScreen({ navigation }: ProfileScreenProps) {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState(true);
   const [discoverable, setDiscoverable] = useState(true);
   const [showOnline, setShowOnline] = useState(false);
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const response = await authService.getCurrentUser();
+      if (response.success && response.data) {
+        setUser(response.data);
+        // Set settings from user data
+        if (response.data.settings) {
+          setNotifications(response.data.settings.pushNotifications);
+          setDiscoverable(response.data.settings.discoveryEnabled);
+          setShowOnline(response.data.settings.showOnlineStatus);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculateAge = (dateOfBirth: string) => {
+    if (!dateOfBirth) return '';
+    const birth = new Date(dateOfBirth);
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age > 0 ? `${age} years old` : '';
+  };
+
+  const getProfilePhoto = () => {
+    if (user?.profile?.photos && user.profile.photos.length > 0) {
+      const primaryPhoto = user.profile.photos.find((photo: any) => photo.isPrimary);
+      return primaryPhoto?.url || user.profile.photos[0]?.url || 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Photo';
+    }
+    return 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Photo';
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
 
   const ProfileOption = ({ 
     icon, 
@@ -42,8 +99,9 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
+      <View style={[styles.safeArea, { paddingTop: STATUS_BAR_HEIGHT }]}>
       
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
@@ -55,18 +113,27 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.profileSection}>
           <View style={styles.profileImageContainer}>
-            <View style={styles.profileImage}>
-              <Ionicons name="person" size={40} color={colors.text.light} />
-            </View>
+            <Image 
+              source={{ uri: getProfilePhoto() }} 
+              style={styles.profileImage}
+              defaultSource={{ uri: 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Photo' }}
+            />
             <TouchableOpacity style={styles.editImageButton}>
               <Ionicons name="camera" size={16} color={colors.text.white} />
             </TouchableOpacity>
           </View>
           
-          <Text style={styles.profileName}>John Doe</Text>
-          <Text style={styles.profileAge}>28 years old</Text>
+          <Text style={styles.profileName}>
+            {user?.profile?.firstName ? `${user.profile.firstName} ${user.profile.lastName || ''}`.trim() : 'Complete Your Profile'}
+          </Text>
+          <Text style={styles.profileAge}>
+            {user?.profile?.dateOfBirth ? calculateAge(user.profile.dateOfBirth) : 'Add your age'}
+          </Text>
           
-          <TouchableOpacity style={styles.editProfileButton}>
+          <TouchableOpacity 
+            style={styles.editProfileButton}
+            onPress={() => navigation.navigate('EditProfile')}
+          >
             <Text style={styles.editProfileText}>Edit Profile</Text>
           </TouchableOpacity>
         </View>
@@ -91,8 +158,8 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           <ProfileOption
             icon="help-circle-outline"
             title="Questions & Preferences"
-            subtitle="Update matching criteria"
-            onPress={() => navigation.navigate('EditPreferences')}
+            subtitle="Update personality questions and matching criteria"
+            onPress={() => navigation.navigate('QuestionsFlow', { isEditMode: true })}
           />
         </View>
 
@@ -200,7 +267,8 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
         <View style={styles.footerSpace} />
       </ScrollView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -208,6 +276,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -248,8 +319,16 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     backgroundColor: colors.border,
-    alignItems: 'center',
+  },
+  loadingContainer: {
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: typography.fontSize.base,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.text.secondary,
+    marginTop: spacing.base,
   },
   editImageButton: {
     position: 'absolute',

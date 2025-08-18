@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TouchableOpacity, FlatList, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TouchableOpacity, FlatList, Dimensions, Alert, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 import { typography } from '../constants/typography';
 import { spacing, buttonHeight } from '../constants/spacing';
 
 const { width } = Dimensions.get('window');
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 20 : StatusBar.currentHeight || 0;
 
 interface LikeProfile {
   id: string;
@@ -78,8 +79,34 @@ interface WhoLikedYouScreenProps {
 export default function WhoLikedYouScreen({ navigation }: WhoLikedYouScreenProps) {
   const [activeTab, setActiveTab] = useState<'recent' | 'all'>('recent');
 
+  const handleUpgrade = () => {
+    Alert.alert(
+      'Upgrade to Premium',
+      'Get unlimited likes, see who likes you, and boost your profile!',
+      [
+        { text: 'Maybe Later', style: 'cancel' },
+        { text: 'Upgrade Now', onPress: () => Alert.alert('Premium', 'Premium features coming soon!') }
+      ]
+    );
+  };
+
+  const handleLikeAction = (profile: LikeProfile) => {
+    if (profile.isBlurred) {
+      handleUpgrade();
+    } else {
+      Alert.alert('It\'s a Match! 💕', `You and ${profile.name} liked each other!`);
+    }
+  };
+
+  const handlePassAction = (profile: LikeProfile) => {
+    Alert.alert('Passed', `You passed on ${profile.name}`);
+  };
+
   const LikeCard = ({ profile }: { profile: LikeProfile }) => (
-    <TouchableOpacity style={styles.likeCard}>
+    <TouchableOpacity 
+      style={styles.likeCard}
+      onPress={() => profile.isBlurred ? handleUpgrade() : Alert.alert('Profile', `Viewing ${profile.name}'s profile...`)}
+    >
       <View style={styles.cardContent}>
         <View style={[styles.profileImage, profile.isBlurred && styles.blurredImage]}>
           {profile.isBlurred ? (
@@ -114,18 +141,27 @@ export default function WhoLikedYouScreen({ navigation }: WhoLikedYouScreenProps
 
         {!profile.isBlurred ? (
           <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.passButton}>
+            <TouchableOpacity 
+              style={styles.passButton}
+              onPress={() => handlePassAction(profile)}
+            >
               <Ionicons name="close" size={20} color={colors.error} />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.likeButton}>
+            <TouchableOpacity 
+              style={styles.likeButton}
+              onPress={() => handleLikeAction(profile)}
+            >
               <Ionicons name="heart" size={20} color={colors.success} />
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.premiumIndicator}>
+          <TouchableOpacity 
+            style={styles.premiumIndicator}
+            onPress={handleUpgrade}
+          >
             <Ionicons name="star" size={16} color={colors.warning} />
             <Text style={styles.premiumText}>Premium</Text>
-          </View>
+          </TouchableOpacity>
         )}
       </View>
     </TouchableOpacity>
@@ -136,12 +172,21 @@ export default function WhoLikedYouScreen({ navigation }: WhoLikedYouScreenProps
   const blurredCount = sampleLikes.filter(like => like.isBlurred).length;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
-      
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
+      <View style={[styles.safeArea, { paddingTop: STATUS_BAR_HEIGHT }]}>
+        <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.headerButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Who Liked You</Text>
-        <TouchableOpacity style={styles.headerButton}>
+        <TouchableOpacity 
+          style={styles.headerButton}
+          onPress={() => Alert.alert('Filter', 'Filter options coming soon!')}
+        >
           <Ionicons name="funnel-outline" size={24} color={colors.text.primary} />
         </TouchableOpacity>
       </View>
@@ -161,7 +206,7 @@ export default function WhoLikedYouScreen({ navigation }: WhoLikedYouScreenProps
               </Text>
             </View>
           </View>
-          <TouchableOpacity style={styles.upgradeButton}>
+          <TouchableOpacity style={styles.upgradeButton} onPress={handleUpgrade}>
             <Text style={styles.upgradeButtonText}>Upgrade</Text>
           </TouchableOpacity>
         </View>
@@ -210,7 +255,8 @@ export default function WhoLikedYouScreen({ navigation }: WhoLikedYouScreenProps
           <Text style={styles.discoverButtonText}>Discover More People</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -218,6 +264,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -227,9 +276,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.base,
   },
   headerTitle: {
-    fontSize: typography.fontSize['2xl'],
+    fontSize: typography.fontSize.xl,
     fontFamily: typography.fontFamily.bold,
     color: colors.text.primary,
+    flex: 1,
+    textAlign: 'center',
   },
   headerButton: {
     width: 40,

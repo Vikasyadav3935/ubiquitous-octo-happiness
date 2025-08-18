@@ -1,108 +1,119 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TouchableOpacity, TextInput, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 import { typography } from '../constants/typography';
 import { spacing, inputHeight } from '../constants/spacing';
+import { chatService, Conversation } from '../services';
 
-interface Chat {
-  id: string;
-  name: string;
-  lastMessage: string;
-  timestamp: string;
-  unreadCount: number;
-  isOnline: boolean;
-}
-
-const sampleChats: Chat[] = [
-  {
-    id: '1',
-    name: 'Sarah Miller',
-    lastMessage: 'That sounds amazing! Would love to join you for hiking this weekend.',
-    timestamp: '2m ago',
-    unreadCount: 2,
-    isOnline: true
-  },
-  {
-    id: '2',
-    name: 'Emily Johnson',
-    lastMessage: 'Thanks for the book recommendation! Just started reading it.',
-    timestamp: '1h ago',
-    unreadCount: 0,
-    isOnline: true
-  },
-  {
-    id: '3',
-    name: 'Jessica Davis',
-    lastMessage: 'Great meeting you today! Looking forward to our coffee date.',
-    timestamp: '3h ago',
-    unreadCount: 1,
-    isOnline: false
-  },
-  {
-    id: '4',
-    name: 'Amanda Wilson',
-    lastMessage: 'The concert was incredible! Thank you for such a wonderful evening.',
-    timestamp: '1d ago',
-    unreadCount: 0,
-    isOnline: false
-  },
-  {
-    id: '5',
-    name: 'Lisa Brown',
-    lastMessage: 'I completely agree with your thoughts on that movie.',
-    timestamp: '2d ago',
-    unreadCount: 0,
-    isOnline: true
-  }
-];
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 20 : StatusBar.currentHeight || 0;
 
 interface ChatsScreenProps {
   navigation: any;
 }
 
 export default function ChatsScreen({ navigation }: ChatsScreenProps) {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'matches' | 'messages'>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const filteredChats = sampleChats.filter(chat =>
-    chat.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    loadConversations();
+  }, []);
 
-  const ChatItem = ({ chat }: { chat: Chat }) => (
-    <TouchableOpacity style={styles.chatItem} onPress={() => navigation.navigate('ChatDetail', { chat })}>
-      <View style={styles.chatInfo}>
-        <View style={styles.avatarContainer}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{chat.name.charAt(0)}</Text>
-          </View>
-          {chat.isOnline && <View style={styles.onlineIndicator} />}
-        </View>
-        
-        <View style={styles.chatDetails}>
-          <View style={styles.chatHeader}>
-            <Text style={styles.chatName}>{chat.name}</Text>
-            <Text style={styles.timestamp}>{chat.timestamp}</Text>
+  const loadConversations = async (refresh = false) => {
+    if (refresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    try {
+      console.log('Loading conversations...');
+      const response = await chatService.getConversations();
+      
+      console.log('Conversations response:', response);
+      
+      if (response.success && response.data) {
+        setConversations(response.data.conversations || []);
+        console.log(`Loaded ${response.data.conversations?.length || 0} conversations`);
+      } else {
+        console.warn('No conversations found:', response.error);
+        setConversations([]);
+      }
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+      setConversations([]);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  const filteredConversations = conversations.filter(conversation => {
+    // Backend returns conversations with otherUser directly
+    const otherUser = conversation.otherUser;
+    return otherUser?.profile?.firstName?.toLowerCase().includes(searchQuery.toLowerCase()) || false;
+  });
+
+  const ConversationItem = ({ conversation }: { conversation: Conversation }) => {
+    // Backend returns conversations with otherUser directly
+    const otherUser = conversation.otherUser;
+    if (!otherUser || !otherUser.profile) return null;
+
+    return (
+      <TouchableOpacity 
+        style={styles.chatItem} 
+        onPress={() => navigation.navigate('ChatDetail', { 
+          conversationId: conversation.id,
+          otherUser: otherUser.profile 
+        })}
+      >
+        <View style={styles.chatInfo}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {otherUser.profile.firstName?.charAt(0) || '?'}
+              </Text>
+            </View>
+            {otherUser.isOnline && <View style={styles.onlineIndicator} />}
           </View>
           
-          <View style={styles.messageContainer}>
-            <Text style={styles.lastMessage} numberOfLines={1}>
-              {chat.lastMessage}
-            </Text>
-            {chat.unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadCount}>{chat.unreadCount}</Text>
-              </View>
-            )}
+          <View style={styles.chatDetails}>
+            <View style={styles.chatHeader}>
+              <Text style={styles.chatName}>
+                {otherUser.profile.firstName} {otherUser.profile.lastName || ''}
+              </Text>
+              <Text style={styles.timestamp}>
+                {conversation.lastMessage ? 
+                  chatService.formatMessageTime(conversation.lastMessage.createdAt) : 
+                  'Now'
+                }
+              </Text>
+            </View>
+            
+            <View style={styles.messageContainer}>
+              <Text style={styles.lastMessage} numberOfLines={1}>
+                {conversation.lastMessage?.content || 'Start a conversation...'}
+              </Text>
+              {(conversation.unreadCount || 0) > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadCount}>{conversation.unreadCount || 0}</Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
+      <View style={[styles.safeArea, { paddingTop: STATUS_BAR_HEIGHT }]}>
       
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Messages</Text>
@@ -169,18 +180,33 @@ export default function ChatsScreen({ navigation }: ChatsScreenProps) {
         </View>
       )}
 
-      <ScrollView style={styles.chatsList} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.chatsList} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => loadConversations(true)}
+            tintColor={colors.primary}
+          />
+        }
+      >
         <View style={styles.chatsContainer}>
-          {filteredChats.length > 0 ? (
-            filteredChats.map((chat) => (
-              <ChatItem key={chat.id} chat={chat} />
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading conversations...</Text>
+            </View>
+          ) : filteredConversations.length > 0 ? (
+            filteredConversations.map((conversation) => (
+              <ConversationItem key={conversation.id} conversation={conversation} />
             ))
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="chatbubble-outline" size={60} color={colors.text.light} />
               <Text style={styles.emptyStateTitle}>No conversations found</Text>
               <Text style={styles.emptyStateText}>
-                Start matching with people to begin conversations
+                {searchQuery ? 'No conversations match your search' : 'Start matching with people to begin conversations'}
               </Text>
             </View>
           )}
@@ -190,7 +216,8 @@ export default function ChatsScreen({ navigation }: ChatsScreenProps) {
       <TouchableOpacity style={styles.newChatButton}>
         <Ionicons name="add" size={24} color={colors.text.white} />
       </TouchableOpacity>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -198,6 +225,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -420,5 +450,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing['5xl'],
+  },
+  loadingText: {
+    fontSize: typography.fontSize.base,
+    fontFamily: typography.fontFamily.medium,
+    color: colors.text.secondary,
+    marginTop: spacing.lg,
   },
 });

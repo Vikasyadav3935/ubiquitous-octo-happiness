@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, StatusBar, ScrollView, TextInput, TouchableOpacity, Alert, Platform, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../constants/colors';
 import { typography } from '../constants/typography';
 import { spacing, buttonHeight, inputHeight } from '../constants/spacing';
+import { authService, profileService } from '../services';
+
+const STATUS_BAR_HEIGHT = Platform.OS === 'ios' ? 20 : StatusBar.currentHeight || 0;
 
 interface EditProfileScreenProps {
   navigation: any;
@@ -11,22 +14,90 @@ interface EditProfileScreenProps {
 
 export default function EditProfileScreen({ navigation }: EditProfileScreenProps) {
   const [formData, setFormData] = useState({
-    firstName: 'John',
-    lastName: 'Doe',
-    email: 'john.doe@email.com',
-    phoneNumber: '+91 9876543210',
-    dateOfBirth: '15/06/1995',
-    gender: 'Male',
-    location: 'Mumbai, India',
-    occupation: 'Software Engineer',
-    company: 'Tech Solutions Inc.',
-    education: 'Bachelor of Technology',
-    bio: 'Love traveling, photography, and meeting new people. Always up for an adventure and good conversation!',
-    height: '5\'10"',
-    lookingFor: 'Long-term relationship',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phoneNumber: '',
+    dateOfBirth: '',
+    gender: '',
+    location: '',
+    occupation: '',
+    company: '',
+    education: '',
+    bio: '',
+    height: '',
   });
 
+  const [loading, setLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      const response = await authService.getCurrentUser();
+      if (response.success && response.data) {
+        setUser(response.data);
+        const profile = response.data.profile;
+        
+        setFormData({
+          firstName: profile?.firstName || '',
+          lastName: profile?.lastName || '',
+          email: response.data.email || '',
+          phoneNumber: response.data.phoneNumber || '',
+          dateOfBirth: profile?.dateOfBirth ? formatDate(profile.dateOfBirth) : '',
+          gender: profile?.gender || '',
+          location: profile?.city && profile?.country ? `${profile.city}, ${profile.country}` : '',
+          occupation: profile?.occupation || '',
+          company: profile?.company || '',
+          education: profile?.education || '',
+          bio: profile?.bio || '',
+          height: profile?.height ? `${Math.floor(profile.height / 12)}'${profile.height % 12}"` : '',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  const parseDate = (dateString: string) => {
+    if (!dateString) return null;
+    const [day, month, year] = dateString.split('/');
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  };
+
+  const parseHeight = (heightString: string) => {
+    if (!heightString) return null;
+    const match = heightString.match(/(\d+)'(\d+)"/);
+    if (match) {
+      const feet = parseInt(match[1]);
+      const inches = parseInt(match[2]);
+      return feet * 12 + inches;
+    }
+    return null;
+  };
+
+  const getProfilePhoto = () => {
+    if (user?.profile?.photos && user.profile.photos.length > 0) {
+      const primaryPhoto = user.profile.photos.find((photo: any) => photo.isPrimary);
+      return primaryPhoto?.url || user.profile.photos[0]?.url || 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Photo';
+    }
+    return 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Photo';
+  };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -34,13 +105,50 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
 
   const handleSave = async () => {
     setIsLoading(true);
-    // Simulate API call
-    setTimeout(() => {
+    
+    try {
+      // Parse location into city and country
+      const locationParts = formData.location.split(', ');
+      const city = locationParts[0] || '';
+      const country = locationParts[1] || '';
+      
+      const profileData = {
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        dateOfBirth: parseDate(formData.dateOfBirth),
+        gender: formData.gender,
+        bio: formData.bio.trim(),
+        occupation: formData.occupation.trim(),
+        company: formData.company.trim(),
+        education: formData.education.trim(),
+        height: parseHeight(formData.height),
+        city: city.trim(),
+        country: country.trim(),
+      };
+
+      // Remove empty fields
+      Object.keys(profileData).forEach(key => {
+        if (profileData[key] === '' || profileData[key] === null) {
+          delete profileData[key];
+        }
+      });
+
+      console.log('Updating profile with data:', profileData);
+      const response = await profileService.updateProfile(profileData);
+      
+      if (response.success) {
+        Alert.alert('Success', 'Profile updated successfully!', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
+      } else {
+        Alert.alert('Error', response.error || 'Failed to update profile. Please try again.');
+      }
+    } catch (error) {
+      console.error('Profile update error:', error);
+      Alert.alert('Error', 'Network error. Please check your connection and try again.');
+    } finally {
       setIsLoading(false);
-      Alert.alert('Success', 'Profile updated successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
-    }, 1000);
+    }
   };
 
   const InputField = ({ 
@@ -120,9 +228,19 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
     </View>
   );
 
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} translucent={false} />
+      <View style={[styles.safeArea, { paddingTop: STATUS_BAR_HEIGHT }]}>
       
       <View style={styles.header}>
         <TouchableOpacity 
@@ -148,9 +266,11 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.profileImageSection}>
           <View style={styles.profileImageContainer}>
-            <View style={styles.profileImage}>
-              <Ionicons name="person" size={40} color={colors.text.light} />
-            </View>
+            <Image 
+              source={{ uri: getProfilePhoto() }} 
+              style={styles.profileImage}
+              defaultSource={{ uri: 'https://via.placeholder.com/100x100/CCCCCC/FFFFFF?text=Photo' }}
+            />
             <TouchableOpacity style={styles.editImageButton}>
               <Ionicons name="camera" size={16} color={colors.text.white} />
             </TouchableOpacity>
@@ -206,7 +326,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
           <SelectField
             label="Gender"
             value={formData.gender}
-            options={['Male', 'Female', 'Non-binary', 'Prefer not to say']}
+            options={['MALE', 'FEMALE', 'NON_BINARY', 'OTHER']}
             onSelect={(value) => handleInputChange('gender', value)}
           />
 
@@ -272,7 +392,8 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
 
         <View style={styles.bottomSpace} />
       </ScrollView>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
@@ -280,6 +401,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  safeArea: {
+    flex: 1,
   },
   header: {
     flexDirection: 'row',
@@ -330,8 +454,16 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     backgroundColor: colors.border,
-    alignItems: 'center',
+  },
+  loadingContainer: {
     justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: typography.fontSize.base,
+    fontFamily: typography.fontFamily.regular,
+    color: colors.text.secondary,
+    marginTop: spacing.base,
   },
   editImageButton: {
     position: 'absolute',

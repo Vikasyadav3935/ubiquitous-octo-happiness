@@ -3,7 +3,10 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import SplashScreen from '../screens/SplashScreen';
 import WelcomeScreen from '../screens/WelcomeScreen';
 import LoginScreen from '../screens/LoginScreen';
 import OTPVerificationScreen from '../screens/OTPVerificationScreen';
@@ -32,6 +35,8 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const MainTabNavigator = () => {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -56,14 +61,15 @@ const MainTabNavigator = () => {
           fontSize: 12,
           fontFamily: typography.fontFamily.medium,
           marginTop: -4,
+          marginBottom: Platform.OS === 'ios' ? 0 : 4,
         },
         tabBarStyle: {
           backgroundColor: colors.background,
           borderTopWidth: 1,
           borderTopColor: colors.border,
           paddingTop: 8,
-          paddingBottom: 8,
-          height: 60,
+          paddingBottom: Math.max(insets.bottom, 8),
+          height: 60 + insets.bottom,
         },
         headerShown: false,
       })}
@@ -96,7 +102,7 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Welcome"
+        initialRouteName="Splash"
         screenOptions={{
           headerShown: false,
           gestureEnabled: true,
@@ -117,6 +123,10 @@ export default function AppNavigator() {
           },
         }}
       >
+        <Stack.Screen 
+          name="Splash" 
+          component={SplashScreen} 
+        />
         <Stack.Screen 
           name="Welcome" 
           component={WelcomeScreen} 
